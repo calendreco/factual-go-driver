@@ -3,9 +3,7 @@ package factual
 import(
 	"log"
 	"fmt"
-	"errors"
-	"strconv"
-	// "net/url"
+	"reflect"
 	"io/ioutil"
 	"encoding/json"
 	"github.com/mrjones/oauth"
@@ -33,38 +31,6 @@ type Response struct{
 		IncludedRows int `json:"included_rows"`
 	}
 }
-
-type Hours map[string][][]string
-
-// Factual gives its hours as a seperatly encoded entity
-func (hours *Hours) UnmarshalJSON(data []byte) (err error){
-	// intermediary to avoid an infinite loop
-	i := map[string][][]string{}
-	s, err := strconv.Unquote(string(data))
-	err = json.Unmarshal([]byte(s), &i)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Invalid hours in JSON: %s (%s)", string(data), err))
-	}
-	*hours = Hours(i)
-	return
-}
-
-type Place struct{
-	Tel string `json:"tel"`
-	Name string `json:"name"`
-	Email string `json:"email"`
-	Website string `json:"website"`
-	Hours Hours `json:"hours"`
-	HoursDisplay string `json:"hours_display"`
-	FactualId string `json:"factual_id"`
-	Address string `json:"address"`
-	Neighborhood []string `json:"neighborhood"`
-	Region string `json:"region"`
-	Latitude float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Postcode string `json:"postcode"`
-}
-
 
 type F map[string]interface{}
 
@@ -95,65 +61,31 @@ func (this *Table) url() string{
 	return API_URL + "/t/" + this.Name
 }
 
-type Query struct{
-	Factual Factual
-	Table *Table
-	Id string
-}
-
-func (this *Table) Filters(f F) *Query{
-	return &Query{this.Factual, this, ""}
-}
-
-func (this *Table) Id(id string) *Query{
-	return &Query{this.Factual, this, id}
-}
-
-// func (this *Table) Search(s string) *Query{
-
-// }
-
-func (this *Query) url() (u string){
-	u = this.Table.url()
-	if this.Id != ""{
-		u += "/" + this.Id
-	}
-	return
-}
-
-func (this *Query) params() map[string]string{
-	return map[string]string{}
-}
-
-func (this *Query) Iter() *Iter{
-	return &Iter{this.Factual, this}
-}
-
-func (this *Query) All() error{
-	return this.Iter().All()
-}
-
-func (this *Query) One(r *interface{}) error{
-	return this.Iter().One(r)
+type Query interface{
+	Params() map[string]string
+	Url() string
+	Iter() *Iter
 }
 
 type Iter struct{
 	Factual Factual
-	Query *Query
-	// Results interface{}
+	Query Query
 }
 
 func (this *Iter) fetch() (r Response, err error){
 	t := this.Factual.Token
-	r = Response{}
-	log.Println(this.Query.url())
-	resp, err := this.Factual.Consumer.Get(this.Query.url(), this.Query.params(), t)
+	url := this.Query.Url()
+	params := this.Query.Params()
+	params = map[string]string{}
+	log.Println("request", url, params)
+	resp, err := this.Factual.Consumer.Get(url, params, t)
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil{
 		return
 	}
 
+	r = Response{}
 	err = json.Unmarshal(body, &r)
 
 	if r.ErrorType != ""{
@@ -163,27 +95,25 @@ func (this *Iter) fetch() (r Response, err error){
 	return
 }
 
-// func (this *Iter) Next(r interface{}) error{
+func (this *Iter) All(rs interface{}) (err error){
+	resp, err := this.fetch()
 
-// }
+	ref := reflect.ValueOf(rs).Elem()
+	elemt := ref.Type().Elem()
 
-func (this *Iter) All() error{
-	_, err := this.fetch()
-	return err
-	// check the user passed in an array pointer
-	// resultv := reflect.ValueOf(result)
-	// if resultv.Kind() != reflect.Ptr || resultv.Elem().Kind() != reflect.Slice {
-	// 	panic("result argument must be a slice address")
-	// }
+	for _, r := range resp.Response.Data{
+		// Generate a new pointer, resolve it
+		elemp := reflect.New(elemt)
+		// Generate an interface for unmarshalling
+		i := elemp.Interface()
+		err = json.Unmarshal(r, &i)
+		// Add it to the results
+		ref = reflect.Append(ref, elemp.Elem())
+	}
 
-	// for{
-	// 	v = &
-	// 	if err = this.Next(v); err == nil{
-	// 		result = append(result, v)
-	// 	}
-	// }
+	reflect.ValueOf(rs).Elem().Set(ref)
 
-	// return 
+	return
 }
 
 func (this *Iter) One(r interface{}) (err error){

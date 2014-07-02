@@ -1,7 +1,7 @@
 package factual_test
 
 import (
-	// "log"
+	"log"
 	"github.com/calendreco/factual"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,24 +31,43 @@ var _ = Describe("Factuals api", func(){
 
 		It("Should support searching", func(){
 			c := t.Search("Chipotle")
-			ps := []&factual.Place{}
-			err := c.Iter().All(ps)
+			ps := []factual.Place{}
+			err := c.Iter().All(&ps)
 			Ω(err).Should(BeNil())
-			for p := range ps{
-				Ω(p.Name).Should(ContainSubstring("chipotle"))
+			for _, p := range ps{
+				log.Println(p.Name)
+				Ω(p.Name).Should(ContainSubstring("Chipotle"))
 			}
 		})
 
 		It("Should support filtering", func(){
 			c := t.Filter(factual.F{"region":"NY"})
-			ps := []&factual.Place{}
-			err := c.Iter().All(ps)
+			ps := []factual.Place{}
+			err := c.Iter().All(&ps)
 			Ω(err).Should(BeNil())
-			for p := range ps{
+			for _, p := range ps{
+				log.Println(p.Region)
 				Ω(p.Region).Should(Equal("NY"))
 			}
 		})
 
+	})
+
+	FDescribe("The crosswalk api", func(){
+		t := instance.Table("crosswalk")
+
+		It("Should return for a specific id", func(){
+			c := t.Id("5a46e853-a617-4ce6-8bd9-de0daa3c76f4")
+
+			cs := []factual.Crosswalk{}
+			err := c.Iter().All(&cs)
+			Ω(err).Should(BeNil())
+
+			for _, c := range cs{
+				log.Println(c.FactualId)
+				Ω(c.FactualId).Should(Equal("5a46e853-a617-4ce6-8bd9-de0daa3c76f4"))
+			}
+		})
 	})
 
 })
