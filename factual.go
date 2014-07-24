@@ -118,6 +118,9 @@ func (this *Iter) All(rs interface{}) (err error){
 
 func (this *Iter) One(r interface{}) (err error){
 	resp, err := this.fetch()
+	if err != nil{
+		return
+	}
 	err = json.Unmarshal(resp.Response.Data[0], r)
 	return
 }
